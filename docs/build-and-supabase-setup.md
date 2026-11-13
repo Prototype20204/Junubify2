@@ -20,7 +20,7 @@ The second migration adds the storage cleanup policy used when an audio upload s
 
 Never put Supabase service-role credentials, payment secrets, or webhook secrets in frontend `VITE_` variables. The browser app should use only the Supabase project URL and its anon/publishable key.
 
-For email/password signup, enable email confirmations in Supabase Auth. Set **Site URL** to `https://junubify.vercel.app` and add it to **Redirect URLs**. Production auth emails always use this canonical domain; local development uses its current origin unless `VITE_AUTH_REDIRECT_URL` is set. Use a domain assigned to the Vercel project and remove obsolete Vercel aliases from the Supabase URL settings.
+For email/password signup, enable email confirmations in Supabase Auth. Set **Site URL** to `https://junubify-neon.vercel.app` and add it to **Redirect URLs**. Production auth emails return to this deployed domain; local development uses its current origin unless `VITE_AUTH_REDIRECT_URL` is set.
 
 ## Local Supabase development
 

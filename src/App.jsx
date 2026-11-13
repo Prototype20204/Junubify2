@@ -4,7 +4,7 @@ import { supabase, supabaseConfigured } from './lib/supabase.js';
 import { createTrackAudioUrl, fetchArtistTracks, fetchPublishedTracks, submitTrack } from './lib/catalog.js';
 
 const paymentSetupMessage = 'Checkout and payouts are not connected yet. Configure a payment provider and secure backend before accepting money or promising transfers.';
-const canonicalSiteUrl = 'https://junubify.vercel.app';
+const productionAuthRedirectUrl = 'https://junubify-neon.vercel.app';
 const emptyForm = { title: '', artist: '', genre: 'Afrobeat', album: '', cover: '' };
 const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=500';
 const samplePreviewDuration = 30;
@@ -144,7 +144,7 @@ export default function App() {
 
   const authRedirectUrl = import.meta.env.DEV
     ? import.meta.env.VITE_AUTH_REDIRECT_URL?.trim() || window.location.origin
-    : canonicalSiteUrl;
+    : productionAuthRedirectUrl;
 
   const submitAuth = async (event) => {
     event.preventDefault();
