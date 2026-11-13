@@ -157,14 +157,30 @@ img { max-width: 100%; }
 .notice-box { padding: 16px; border: 1px solid rgba(239, 192, 110, .28); border-radius: 8px; color: #f3d9aa; background: rgba(81, 57, 29, .2); }
 .notice-box p { margin: 7px 0 0; color: #cbbd9f; line-height: 1.55; overflow-wrap: anywhere; }
 .notice-box .button { margin-top: 12px; }
-.studio-auth { max-width: 540px; padding: 24px; }
-.studio-auth h2, .upload-form h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 8px; font-size: 20px; }
-.studio-auth > p, .upload-form > p { margin: 0 0 20px; }
+.studio-auth { width: min(100%, 500px); margin-inline: auto; padding: 30px; border-color: rgba(112, 215, 163, .25); background: linear-gradient(155deg, rgba(28, 48, 37, .98), rgba(17, 26, 21, .98)); box-shadow: 0 24px 70px rgba(0, 0, 0, .24); }
+.studio-auth h2, .upload-form h2 { display: flex; align-items: center; gap: 9px; margin: 8px 0; font-size: 25px; letter-spacing: -.025em; }
+.studio-auth .auth-intro { margin: 0 0 20px; color: var(--muted); line-height: 1.6; }
+.auth-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 0 0 21px; padding: 4px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 9px; background: rgba(7, 13, 10, .45); }
+.auth-mode-switch button { min-height: 40px; border: 0; border-radius: 6px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .18s ease, color .18s ease; }
+.auth-mode-switch button:hover { color: var(--text); }
+.auth-mode-switch button.selected { color: #102017; background: var(--green); box-shadow: 0 4px 14px rgba(112, 215, 163, .16); }
 .studio-auth form, .upload-form { display: grid; gap: 15px; }
 .studio-auth label, .upload-form label { display: grid; gap: 7px; color: #dce5dc; font-size: 12px; font-weight: 700; }
 .studio-auth input, .upload-form input, .upload-form select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: #101914; }
 .studio-auth input::placeholder, .upload-form input::placeholder { color: #718078; }
 .studio-auth .button, .upload-form > .button { justify-self: start; }
+.studio-auth .auth-form { gap: 15px; }
+.studio-auth .auth-form label { font-size: 13px; }
+.studio-auth .auth-form input { min-height: 48px; border-radius: 8px; font-size: 14px; }
+.studio-auth .auth-form input:focus-visible { border-color: var(--green); outline: 3px solid rgba(112, 215, 163, .17); outline-offset: 1px; }
+.studio-auth .auth-form > .button { width: 100%; justify-self: stretch; min-height: 46px; font-size: 14px; }
+.auth-link-button { justify-self: center; padding: 5px 8px; border: 0; color: var(--green); background: transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.auth-link-button:hover { color: #a0efc3; text-decoration: underline; }
+.auth-link-button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-feedback { margin: 0; padding: 11px 12px; border: 1px solid transparent; border-radius: 7px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.auth-feedback.error { border-color: rgba(248, 113, 113, .32); color: #fecaca; background: rgba(127, 29, 29, .2); }
+.auth-feedback.success { border-color: rgba(112, 215, 163, .28); color: #b8f3d0; background: rgba(22, 101, 52, .16); }
+.auth-footnote { margin: 20px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; text-align: center; }
 .studio-account { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 14px; padding: 12px 0; color: var(--muted); }
 .studio-account b { color: var(--text); overflow-wrap: anywhere; }
 .studio-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }

@@ -82,6 +82,12 @@ export default function App() {
   const [form, setForm] = useState(emptyForm);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [authMode, setAuthMode] = useState('signin');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const [authError, setAuthError] = useState('');
   const [session, setSession] = useState(null);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -135,12 +141,70 @@ export default function App() {
     setSelectedFile(file);
   };
 
-  const requestSignIn = async (event) => {
+  const authRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL?.trim() || window.location.origin;
+
+  const submitAuth = async (event) => {
     event.preventDefault();
-    if (!supabase) return notify('Add the Supabase project URL and anon key to enable artist sign-in.');
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.origin } });
-    if (error) notify(error.message);
-    else notify('Check your email for a secure sign-in link.');
+    if (!supabase) {
+      setAuthError('Connect Supabase before creating an account or signing in.');
+      return;
+    }
+    if (authMode === 'signup' && password !== confirmPassword) {
+      setAuthError('Your passwords do not match.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { emailRedirectTo: authRedirectUrl },
+        });
+        if (error) throw error;
+        setAuthMessage(data.session
+          ? 'Your account is ready. You are signed in.'
+          : 'Check your email and verify your address. After verification, return here to sign in.');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) throw error;
+        setAuthMessage('You are signed in and can submit music for review.');
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const sendSignInLink = async () => {
+    if (!supabase) {
+      setAuthError('Connect Supabase before creating an account or signing in.');
+      return;
+    }
+    if (!email.trim()) {
+      setAuthError('Enter your email address to receive a sign-in link.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: false, emailRedirectTo: authRedirectUrl },
+      });
+      if (error) throw error;
+      setAuthMessage('Check your inbox for a secure sign-in link.');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not send a sign-in link. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const signOut = async () => {
@@ -292,7 +356,164 @@ export default function App() {
           <section className="upload-promo"><div><span className="eyebrow">ARE YOU AN ARTIST?</span><h2>Bring your sound to Junubify.</h2><p>Submit your music securely for review in Artist Studio.</p></div><button className="button primary" onClick={() => setTab('studio')}><Upload size={16}/> Open studio</button></section>
         </>)}
 
-        {tab === 'studio' && <><section className="section-heading"><div><span className="eyebrow">ARTIST PORTAL</span><h1>Artist studio</h1><p className="muted">Submit a track for review. Audio is stored privately until approved.</p></div></section>{!supabaseConfigured && <div className="notice-box prominent"><b>Backend setup required</b><p>Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then apply the Supabase migrations to enable uploads.</p></div>}{!session ? <section className="panel studio-auth"><h2>Sign in to submit music</h2><p className="muted">We’ll email you a secure sign-in link.</p><form onSubmit={requestSignIn}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com"/></label><button className="button primary" type="submit">Send sign-in link</button></form></section> : <><div className="studio-account"><span>Signed in as <b>{session.user.email}</b></span><button className="button secondary" onClick={signOut}>Sign out</button></div><div className="studio-grid"><form className="panel upload-form" onSubmit={publishTrack}><h2><Upload size={19}/> Submit a song</h2><p className="muted">MP3, WAV, M4A, OGG, AAC, or FLAC · up to 50 MB</p><label>Song title<input required maxLength="100" value={form.title} onChange={(event) => setForm({...form, title: event.target.value})} placeholder="e.g. Nile Sunset"/></label><label>Artist name<input required maxLength="100" value={form.artist} onChange={(event) => setForm({...form, artist: event.target.value})} placeholder="Your artist name"/></label><label>Genre<select value={form.genre} onChange={(event) => setForm({...form, genre: event.target.value})}><option>Afrobeat</option><option>Dancehall</option><option>Hip-Hop</option><option>Traditional &amp; Cultural</option><option>Gospel &amp; Choir</option><option>Afro-Pop</option></select></label><label>Album / release name<input maxLength="100" value={form.album} onChange={(event) => setForm({...form, album: event.target.value})} placeholder="Single"/></label><label>Cover image URL <span className="muted">(optional)</span><input type="url" value={form.cover} onChange={(event) => setForm({...form, cover: event.target.value})} placeholder="https://"/></label><label className="file-picker"><Music2 size={21}/><span><b>{selectedFile ? selectedFile.name : 'Choose audio file'}</b><small>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : 'Audio file · up to 50 MB'}</small></span><input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" onChange={(event) => handleFile(event.target.files?.[0])}/></label><label className="rights-confirm"><input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)}/><span>I confirm that I own or control the rights to this audio.</span></label><button className="button primary full" type="submit" disabled={submitting || !supabaseConfigured}><Upload size={16}/>{submitting ? 'Uploading securely…' : 'Submit for review'}</button><p className="fine-print">Submissions remain private until approved.</p></form><section className="panel catalog-panel"><div className="catalog-title"><h2>Your submissions</h2><button className="button secondary" onClick={refreshCatalog}>Refresh</button></div>{artistTracks.length ? artistTracks.map((track) => <div className="mini-track" key={track.id}><img src={track.cover} alt=""/><div><strong>{track.title}</strong><span>{track.artist} · {track.status.replace('_', ' ')}</span></div>{track.status === 'published' && <button className="mini-play" onClick={() => playTrack(track)} aria-label={`Play ${track.title}`}><Play size={14}/></button>}</div>) : <div className="catalog-empty"><div className="empty-icon"><Music2 size={22}/></div><p><strong>Your submissions will appear here</strong></p><small>Submit a track to add it to your private artist catalog.</small></div>}</section></div></>}</>}
+        {tab === 'studio' && (
+          <>
+            <section className="section-heading">
+              <div>
+                <span className="eyebrow">ARTIST PORTAL</span>
+                <h1>Artist studio</h1>
+                <p className="muted">Submit a track for review. Audio is stored privately until approved.</p>
+              </div>
+            </section>
+            {!supabaseConfigured && (
+              <div className="notice-box prominent">
+                <b>Backend setup required</b>
+                <p>Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then apply the Supabase migrations to enable uploads.</p>
+              </div>
+            )}
+            {!session ? (
+              <section className="panel studio-auth">
+                <span className="eyebrow">ARTIST ACCOUNT</span>
+                <h2>{authMode === 'signup' ? 'Create your artist account' : 'Welcome back'}</h2>
+                <p className="auth-intro">
+                  {authMode === 'signup'
+                    ? 'Join Junubify to share your music with listeners across South Sudan and the diaspora.'
+                    : 'Sign in to manage your submissions and share your sound.'}
+                </p>
+                <div className="auth-mode-switch" role="tablist" aria-label="Artist account options">
+                  <button
+                    className={authMode === 'signin' ? 'selected' : ''}
+                    type="button"
+                    role="tab"
+                    aria-selected={authMode === 'signin'}
+                    onClick={() => {
+                      setAuthMode('signin');
+                      setPassword('');
+                      setConfirmPassword('');
+                      setAuthError('');
+                      setAuthMessage('');
+                    }}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    className={authMode === 'signup' ? 'selected' : ''}
+                    type="button"
+                    role="tab"
+                    aria-selected={authMode === 'signup'}
+                    onClick={() => {
+                      setAuthMode('signup');
+                      setPassword('');
+                      setConfirmPassword('');
+                      setAuthError('');
+                      setAuthMessage('');
+                    }}
+                  >
+                    Create account
+                  </button>
+                </div>
+                <form className="auth-form" onSubmit={submitAuth}>
+                  <label>
+                    Email address
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                      minLength={8}
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="At least 8 characters"
+                    />
+                  </label>
+                  {authMode === 'signup' && (
+                    <label>
+                      Confirm password
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder="Re-enter your password"
+                      />
+                    </label>
+                  )}
+                  {authError && <p className="auth-feedback error" role="alert">{authError}</p>}
+                  {authMessage && <p className="auth-feedback success" role="status">{authMessage}</p>}
+                  <button className="button primary full" type="submit" disabled={authLoading || !supabaseConfigured}>
+                    {authLoading ? 'Please wait…' : authMode === 'signup' ? 'Create account' : 'Sign in'}
+                  </button>
+                  {authMode === 'signin' && (
+                    <button className="auth-link-button" type="button" onClick={sendSignInLink} disabled={authLoading || !supabaseConfigured}>
+                      Email me a secure sign-in link
+                    </button>
+                  )}
+                </form>
+                <p className="auth-footnote">
+                  {authMode === 'signup'
+                    ? 'We’ll email you a verification link. Verify your address to finish creating your account.'
+                    : 'New artists need to verify their email before their first sign-in.'}
+                </p>
+              </section>
+            ) : (
+              <>
+                <div className="studio-account">
+                  <span>Signed in as <b>{session.user.email}</b></span>
+                  <button className="button secondary" onClick={signOut}>Sign out</button>
+                </div>
+                <div className="studio-grid">
+                  <form className="panel upload-form" onSubmit={publishTrack}>
+                    <h2><Upload size={19}/> Submit a song</h2>
+                    <p className="muted">MP3, WAV, M4A, OGG, AAC, or FLAC · up to 50 MB</p>
+                    <label>Song title<input required maxLength="100" value={form.title} onChange={(event) => setForm({...form, title: event.target.value})} placeholder="e.g. Nile Sunset"/></label>
+                    <label>Artist name<input required maxLength="100" value={form.artist} onChange={(event) => setForm({...form, artist: event.target.value})} placeholder="Your artist name"/></label>
+                    <label>Genre<select value={form.genre} onChange={(event) => setForm({...form, genre: event.target.value})}><option>Afrobeat</option><option>Dancehall</option><option>Hip-Hop</option><option>Traditional &amp; Cultural</option><option>Gospel &amp; Choir</option><option>Afro-Pop</option></select></label>
+                    <label>Album / release name<input maxLength="100" value={form.album} onChange={(event) => setForm({...form, album: event.target.value})} placeholder="Single"/></label>
+                    <label>Cover image URL <span className="muted">(optional)</span><input type="url" value={form.cover} onChange={(event) => setForm({...form, cover: event.target.value})} placeholder="https://"/></label>
+                    <label className="file-picker"><Music2 size={21}/><span><b>{selectedFile ? selectedFile.name : 'Choose audio file'}</b><small>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : 'Audio file · up to 50 MB'}</small></span><input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" onChange={(event) => handleFile(event.target.files?.[0])}/></label>
+                    <label className="rights-confirm"><input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)}/><span>I confirm that I own or control the rights to this audio.</span></label>
+                    <button className="button primary full" type="submit" disabled={submitting || !supabaseConfigured}><Upload size={16}/>{submitting ? 'Uploading securely…' : 'Submit for review'}</button>
+                    <p className="fine-print">Submissions remain private until approved.</p>
+                  </form>
+                  <section className="panel catalog-panel">
+                    <div className="catalog-title">
+                      <h2>Your submissions</h2>
+                      <button className="button secondary" onClick={refreshCatalog}>Refresh</button>
+                    </div>
+                    {artistTracks.length ? artistTracks.map((track) => (
+                      <div className="mini-track" key={track.id}>
+                        <img src={track.cover} alt=""/>
+                        <div>
+                          <strong>{track.title}</strong>
+                          <span>{track.artist} · {track.status.replace('_', ' ')}</span>
+                        </div>
+                        {track.status === 'published' && <button className="mini-play" onClick={() => playTrack(track)} aria-label={`Play ${track.title}`}><Play size={14}/></button>}
+                      </div>
+                    )) : (
+                      <div className="catalog-empty">
+                        <div className="empty-icon"><Music2 size={22}/></div>
+                        <p><strong>Your submissions will appear here</strong></p>
+                        <small>Submit a track to add it to your private artist catalog.</small>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         {tab === 'monetize' && <><section className="section-heading"><div><span className="eyebrow">CREATOR ECONOMY</span><h1>Monetization</h1><p className="muted">Plans and royalty information. Payments are not active.</p></div></section><div className="notice-box prominent"><b>Payments are not live yet</b><p>{paymentSetupMessage}</p></div><section className="plan-grid"><article className="panel plan-card"><span className="eyebrow">FOR LISTENERS</span><h2>Premium Fan</h2><div className="price">$2.99 <small>/ month</small></div><ul><li>Ad-free listening concept</li><li>Support local artists</li><li>Exclusive releases</li></ul></article><article className="panel plan-card"><span className="eyebrow">FOR ARTISTS</span><h2>Pro Creator</h2><div className="price">70% <small>proposed share</small></div><ul><li>Artist uploads</li><li>Proposed royalty share</li><li>Listener analytics concept</li></ul></article></section><section className="panel payout-panel"><div><span className="eyebrow">ROYALTIES &amp; PAYOUTS</span><h2>Artist earnings</h2><p className="muted">No earnings are calculated or transferred yet.</p></div><Wallet size={28}/></section></>}
 

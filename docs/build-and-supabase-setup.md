@@ -4,14 +4,30 @@
 
 The GitHub Actions workflow at `.github/workflows/build.yml` runs for pushes and pull requests targeting `main`. It installs dependencies with Node.js 20 and runs `npm run build`; it does not connect to Datadog or require repository secrets.
 
-## Apply the Supabase migrations
+## Apply the Supabase migrations to a hosted project
 
-For a new Supabase project, apply the SQL migrations in timestamp order from the repository root:
+The repository includes Supabase CLI configuration and timestamped migrations. From the repository root, authenticate the CLI, link the project, and apply all pending migrations:
 
-1. `supabase/migrations/20261109000000_platform_backend.sql`
-2. `supabase/migrations/20261109010000_audio_cleanup_policy.sql`
-3. `supabase/migrations/20261109020000_payment_foundation.sql`
+```sh
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase db push
+```
+
+The project reference is the subdomain in your project URL. `db push` applies migrations in timestamp order. Alternatively, run the SQL files in `supabase/migrations/` in timestamp order using the Supabase SQL editor.
 
 The second migration adds the storage cleanup policy used when an audio upload succeeds but track metadata insertion fails. The payment migration only creates a restricted ledger foundation; payment checkout, webhooks, and payouts remain disabled until a provider integration is implemented and verified.
 
 Never put Supabase service-role credentials, payment secrets, or webhook secrets in frontend `VITE_` variables. The browser app should use only the Supabase project URL and its anon/publishable key.
+
+For email/password signup, enable email confirmations in Supabase Auth. Set **Site URL** to the canonical deployed origin and add that origin to **Redirect URLs** (for example, `https://your-site.vercel.app/**`). Optionally set `VITE_AUTH_REDIRECT_URL` to that same origin in the app environment; when unset, the app uses the current site origin. Use a domain assigned to the Vercel project so verification links return to a reachable site.
+
+## Local Supabase development
+
+Docker is required to run the local Supabase stack. Start it with:
+
+```sh
+npx supabase start
+```
+
+The CLI applies the migrations to the local database. Use the local API URL and anon key printed by `supabase start` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` when running the app locally. Stop the local stack with `npx supabase stop`.
