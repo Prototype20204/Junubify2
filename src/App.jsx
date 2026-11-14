@@ -146,6 +146,7 @@ export default function App() {
           setVerificationStatus('error');
           setVerificationError(error.message);
         }
+        return;
       }
       const currentSession = data?.session ?? null;
       setSession(currentSession);
@@ -156,6 +157,14 @@ export default function App() {
           setVerificationError('This verification link may have expired or already been used. Request a new link and try again.');
         }
       }
+    }).catch((error) => {
+      if (!active) return;
+      const message = error instanceof Error ? error.message : 'Could not restore your sign-in session.';
+      notify(message);
+      if (isVerificationRoute) {
+        setVerificationStatus('error');
+        setVerificationError(message);
+      }
     });
     if (callbackError && isVerificationRoute) {
       setVerificationStatus('error');
@@ -163,7 +172,7 @@ export default function App() {
     }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      if (isVerificationRoute && nextSession && (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION')) {
+      if (isVerificationRoute && !callbackError && nextSession && (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION')) {
         setVerificationStatus('success');
       }
     });

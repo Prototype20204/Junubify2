@@ -3,6 +3,14 @@ import { supabase } from './supabase.js';
 const AUDIO_BUCKET = 'junubify-audio';
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac']);
+const AUDIO_MIME_TYPES = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+};
 
 function throwIfError(result) {
   if (result.error) throw result.error;
@@ -83,7 +91,9 @@ export async function createTrackAudioUrl(audioPath) {
 export async function submitTrack({ file, form, artistId }) {
   if (!supabase) throw new Error('Connect Supabase before submitting audio.');
   if (!artistId) throw new Error('Sign in before submitting a track.');
-  if (!file || file.size > MAX_AUDIO_BYTES) throw new Error('Choose an audio file no larger than 50 MB.');
+  if (!file || file.size === 0 || file.size > MAX_AUDIO_BYTES) {
+    throw new Error('Choose a non-empty audio file no larger than 50 MB.');
+  }
 
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!extension || !ALLOWED_EXTENSIONS.has(extension)) {
@@ -92,7 +102,7 @@ export async function submitTrack({ file, form, artistId }) {
 
   const audioPath = `${artistId}/${crypto.randomUUID()}.${extension}`;
   const upload = await supabase.storage.from(AUDIO_BUCKET).upload(audioPath, file, {
-    contentType: file.type || 'application/octet-stream',
+    contentType: AUDIO_MIME_TYPES[extension],
     upsert: false,
   });
   if (upload.error) throw upload.error;
@@ -111,7 +121,17 @@ export async function submitTrack({ file, form, artistId }) {
 
   if (insert.error) {
     // The storage delete policy permits removing only this user's unreferenced uploads.
-    await supabase.storage.from(AUDIO_BUCKET).remove([audioPath]);
+    let cleanupError;
+    try {
+      const cleanup = await supabase.storage.from(AUDIO_BUCKET).remove([audioPath]);
+      cleanupError = cleanup.error;
+    } catch (error) {
+      cleanupError = error;
+    }
+    if (cleanupError) {
+      const detail = cleanupError instanceof Error ? cleanupError.message : 'Unknown cleanup error';
+      throw new Error(`Track metadata could not be saved (${insert.error.message}), and its private audio upload could not be removed (${detail}). Contact support to clean up the upload.`);
+    }
     throw insert.error;
   }
 
