@@ -17,17 +17,24 @@ const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a
 const samplePreviewDuration = 30;
 const emailRateLimitMessage = 'Supabase is temporarily limiting confirmation emails. Its built-in sender allows only 2 emails per hour. Wait for the limit to reset or configure custom SMTP in Supabase Auth settings, then try again.';
 const emailSenderSetupMessage = "Supabase's built-in email sender is for testing and may only send to project team members. Configure custom SMTP in Supabase Auth settings before requesting confirmation emails for other addresses.";
+const emailDeliveryErrorMessage = 'Supabase could not send this email. Check that custom SMTP is enabled and the sender address belongs to your verified Resend domain, then review the Supabase Auth logs.';
 const formatPlaybackTime = (seconds) => {
   if (!Number.isFinite(seconds)) return '0:00';
   const totalSeconds = Math.floor(seconds);
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 };
-const getAuthErrorMessage = (error, fallback) => {
-  if (error instanceof Error) {
-    if (/email rate limit exceeded/i.test(error.message)) return emailRateLimitMessage;
-    if (/email address not authorized/i.test(error.message)) return emailSenderSetupMessage;
+const getAuthErrorMessage = (error, fallback, { emailDelivery = false } = {}) => {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error?.message === 'string' ? error.message : '';
+  const status = typeof error?.status === 'number' ? error.status : null;
+
+  if (/email rate limit exceeded/i.test(message) || (emailDelivery && status === 429)) {
+    return emailRateLimitMessage;
   }
-  return error instanceof Error ? error.message : fallback;
+  if (/email address not authorized/i.test(message)) return emailSenderSetupMessage;
+  if (emailDelivery && status >= 500) return emailDeliveryErrorMessage;
+  return message && message !== '{}' ? message : fallback;
 };
 // Public audio samples are previews for the UI, not official South Sudanese releases.
 const demoTracks = [
@@ -126,13 +133,16 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('junubify-liked-tracks') || '{}'); } catch { return {}; }
   });
   const audioRef = useRef(null);
+  const noticeTimerRef = useRef(null);
   const sampleEndHandledRef = useRef(false);
 
   const notify = (message) => {
     setNotice(message);
-    window.clearTimeout(notify.timeout);
-    notify.timeout = window.setTimeout(() => setNotice(''), 5000);
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(''), 5000);
   };
+
+  useEffect(() => () => window.clearTimeout(noticeTimerRef.current), []);
 
   useEffect(() => {
     if (!supabase) {
@@ -335,7 +345,9 @@ export default function App() {
         setAuthMessage('You are signed in and can submit music for review.');
       }
     } catch (error) {
-      setAuthError(getAuthErrorMessage(error, 'Authentication failed. Please try again.'));
+      setAuthError(getAuthErrorMessage(error, 'Authentication failed. Please try again.', {
+        emailDelivery: authMode === 'signup',
+      }));
     } finally {
       setAuthLoading(false);
     }
@@ -362,7 +374,7 @@ export default function App() {
       if (error) throw error;
       setAuthMessage('Check your inbox for a secure sign-in link.');
     } catch (error) {
-      setAuthError(getAuthErrorMessage(error, 'Could not send a sign-in link. Please try again.'));
+      setAuthError(getAuthErrorMessage(error, 'Could not send a sign-in link. Please try again.', { emailDelivery: true }));
     } finally {
       setAuthLoading(false);
     }
@@ -390,7 +402,7 @@ export default function App() {
       if (error) throw error;
       setAuthMessage('A new verification email has been sent. Check your inbox, including your spam folder.');
     } catch (error) {
-      setAuthError(getAuthErrorMessage(error, 'Could not resend the verification email. Please try again.'));
+      setAuthError(getAuthErrorMessage(error, 'Could not resend the verification email. Please try again.', { emailDelivery: true }));
     } finally {
       setAuthLoading(false);
     }
