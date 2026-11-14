@@ -15,7 +15,7 @@ The anon/publishable key is intended for browser use only. Never put a Supabase 
 
 ## Configure persistent song submissions
 
-1. Create a Supabase project and enable email authentication. Add `https://junubify-neon.vercel.app` and `https://junubify-neon.vercel.app/auth/verified` to the allowed redirect URLs; signup verification returns to the dedicated callback page.
+1. Create a Supabase project and enable email authentication. Add `https://junubify-neon.vercel.app` and `https://junubify-neon.vercel.app/auth/verified` to the allowed redirect URLs; signup verification returns to the dedicated callback page. Configure a custom SMTP provider before sending confirmation emails to public users; Supabase's built-in sender is limited to 2 emails per hour and is not intended for production.
 2. From the repository root, run `npx supabase login`, `npx supabase link --project-ref YOUR_PROJECT_REF`, then `npx supabase db push` to apply the migrations. You can also apply the timestamped SQL files in `supabase/migrations/` in order through the project SQL editor. See [the setup guide](docs/build-and-supabase-setup.md) for details.
 3. Set the project URL and anon/publishable key in `.env.local` and in your web host's environment settings.
 4. Start the app. Artists can create an account with email and password, verify their email, then sign in and submit metadata and audio from Artist Studio. Existing artists can also request a passwordless sign-in link.

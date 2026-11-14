@@ -15,10 +15,19 @@ const productionVerificationRedirectUrl = `${productionAuthRedirectUrl}/auth/ver
 const emptyForm = { title: '', artist: '', genre: 'Afrobeat', album: '', cover: '' };
 const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=500';
 const samplePreviewDuration = 30;
+const emailRateLimitMessage = 'Supabase is temporarily limiting confirmation emails. Its built-in sender allows only 2 emails per hour. Wait for the limit to reset or configure custom SMTP in Supabase Auth settings, then try again.';
+const emailSenderSetupMessage = "Supabase's built-in email sender is for testing and may only send to project team members. Configure custom SMTP in Supabase Auth settings before requesting confirmation emails for other addresses.";
 const formatPlaybackTime = (seconds) => {
   if (!Number.isFinite(seconds)) return '0:00';
   const totalSeconds = Math.floor(seconds);
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+};
+const getAuthErrorMessage = (error, fallback) => {
+  if (error instanceof Error) {
+    if (/email rate limit exceeded/i.test(error.message)) return emailRateLimitMessage;
+    if (/email address not authorized/i.test(error.message)) return emailSenderSetupMessage;
+  }
+  return error instanceof Error ? error.message : fallback;
 };
 // Public audio samples are previews for the UI, not official South Sudanese releases.
 const demoTracks = [
@@ -326,7 +335,7 @@ export default function App() {
         setAuthMessage('You are signed in and can submit music for review.');
       }
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Authentication failed. Please try again.');
+      setAuthError(getAuthErrorMessage(error, 'Authentication failed. Please try again.'));
     } finally {
       setAuthLoading(false);
     }
@@ -353,7 +362,7 @@ export default function App() {
       if (error) throw error;
       setAuthMessage('Check your inbox for a secure sign-in link.');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Could not send a sign-in link. Please try again.');
+      setAuthError(getAuthErrorMessage(error, 'Could not send a sign-in link. Please try again.'));
     } finally {
       setAuthLoading(false);
     }
@@ -381,7 +390,7 @@ export default function App() {
       if (error) throw error;
       setAuthMessage('A new verification email has been sent. Check your inbox, including your spam folder.');
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Could not resend the verification email. Please try again.');
+      setAuthError(getAuthErrorMessage(error, 'Could not resend the verification email. Please try again.'));
     } finally {
       setAuthLoading(false);
     }

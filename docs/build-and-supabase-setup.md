@@ -36,6 +36,8 @@ Confirm that the query inserted one row. The admin should sign out and back in t
 
 For email/password signup, enable email confirmations in Supabase Auth. Set **Site URL** to `https://junubify-neon.vercel.app` and add both `https://junubify-neon.vercel.app` and `https://junubify-neon.vercel.app/auth/verified` to **Redirect URLs**. Signup confirmation returns to the dedicated `/auth/verified` landing page; passwordless sign-in links return to the site root.
 
+Before sending confirmation emails to real users, configure a custom SMTP provider in **Authentication → SMTP Settings**. Supabase's built-in sender is for testing only: it is limited to 2 messages per hour and may deliver only to project team members. A rate-limit error cannot be fixed in the client app; configure SMTP, verify your sender domain with the provider (including SPF/DKIM), then use **Resend verification email**. The built-in sender's quota must reset before another message can be sent. Do not disable email confirmation as a workaround.
+
 For local development, add `http://localhost:5173/auth/verified` to **Redirect URLs** (and the site root if using passwordless sign-in). The app uses its current origin unless `VITE_AUTH_REDIRECT_URL` is set; if set, allow the corresponding `/auth/verified` URL in Supabase as well. The callback page completes the Supabase session exchange and reports whether verification succeeded or the link needs to be requested again.
 
 ## Local Supabase development
