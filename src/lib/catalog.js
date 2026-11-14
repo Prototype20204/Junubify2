@@ -12,6 +12,7 @@ function throwIfError(result) {
 function mapTrack(track) {
   return {
     id: track.id,
+    artistId: track.artist_id,
     title: track.title,
     artist: track.artist_name,
     genre: track.genre,
@@ -21,6 +22,10 @@ function mapTrack(track) {
     audioPath: track.audio_path,
     status: track.status,
     fileName: track.audio_path.split('/').pop(),
+    createdAt: track.created_at,
+    rightsConfirmedAt: track.rights_confirmed_at,
+    reviewedAt: track.reviewed_at,
+    reviewedBy: track.reviewed_by,
   };
 }
 
@@ -42,6 +47,30 @@ export async function fetchArtistTracks(artistId) {
     .order('created_at', { ascending: false })
     .limit(100));
   return data.map(mapTrack);
+}
+
+export async function fetchAdminTracks() {
+  const data = throwIfError(await supabase
+    .from('tracks')
+    .select('id,artist_id,title,artist_name,genre,album,cover_url,audio_path,status,plays,created_at,rights_confirmed_at,reviewed_at,reviewed_by')
+    .eq('status', 'pending_review')
+    .order('created_at', { ascending: true })
+    .limit(100));
+  return data.map(mapTrack);
+}
+
+export async function updateTrackReviewStatus(trackId, status) {
+  if (!['published', 'rejected'].includes(status)) {
+    throw new Error('Choose a valid review decision.');
+  }
+  const data = throwIfError(await supabase
+    .from('tracks')
+    .update({ status })
+    .eq('id', trackId)
+    .eq('status', 'pending_review')
+    .select('id,artist_id,title,artist_name,genre,album,cover_url,audio_path,status,plays,created_at,rights_confirmed_at,reviewed_at,reviewed_by')
+    .single());
+  return mapTrack(data);
 }
 
 export async function createTrackAudioUrl(audioPath) {

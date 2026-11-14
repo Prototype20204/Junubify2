@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, AudioLines, BadgeCheck, CircleDollarSign, Compass, CreditCard, Download, Headphones, Heart, Music2, Pause, Play, Radio, Smartphone, Sparkles, TrendingUp, Upload, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AudioLines, BadgeCheck, Check, CircleDollarSign, Compass, CreditCard, Download, Headphones, Heart, Music2, Pause, Play, Radio, ShieldCheck, Smartphone, Sparkles, TrendingUp, Upload, Wallet, X } from 'lucide-react';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
-import { createTrackAudioUrl, fetchArtistTracks, fetchPublishedTracks, submitTrack } from './lib/catalog.js';
+import { createTrackAudioUrl, fetchAdminTracks, fetchArtistTracks, fetchPublishedTracks, submitTrack, updateTrackReviewStatus } from './lib/catalog.js';
 
 const paymentSetupMessage = 'Checkout and payouts are not connected yet. Configure a payment provider and secure backend before accepting money or promising transfers.';
 const paymentMethods = [
@@ -11,6 +11,7 @@ const paymentMethods = [
   { name: 'Credit card', detail: 'Card checkout', type: 'card' },
 ];
 const productionAuthRedirectUrl = 'https://junubify-neon.vercel.app';
+const productionVerificationRedirectUrl = `${productionAuthRedirectUrl}/auth/verified`;
 const emptyForm = { title: '', artist: '', genre: 'Afrobeat', album: '', cover: '' };
 const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=500';
 const samplePreviewDuration = 30;
@@ -74,7 +75,8 @@ function PlaylistDetail({ playlist, tracks, playing, isPlaying, onBack, onPlayTr
 }
 
 export default function App() {
-  const [tab, setTab] = useState('discover');
+  const isVerificationRoute = window.location.pathname === '/auth/verified';
+  const [tab, setTab] = useState(isVerificationRoute ? 'verified' : 'discover');
   const [tracks, setTracks] = useState([]);
   const [artistTracks, setArtistTracks] = useState([]);
   const [query, setQuery] = useState('');
@@ -95,7 +97,16 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [authError, setAuthError] = useState('');
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [createdEmail, setCreatedEmail] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState(isVerificationRoute ? 'checking' : 'idle');
+  const [verificationError, setVerificationError] = useState('');
   const [session, setSession] = useState(null);
+  const [isTrackAdmin, setIsTrackAdmin] = useState(false);
+  const [adminTracks, setAdminTracks] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState('');
+  const [reviewingTrackId, setReviewingTrackId] = useState('');
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [catalogError, setCatalogError] = useState('');
@@ -115,13 +126,51 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!supabase) return undefined;
+    if (!supabase) {
+      if (isVerificationRoute) {
+        setVerificationStatus('error');
+        setVerificationError('Email verification is unavailable because the authentication service is not configured.');
+      }
+      return undefined;
+    }
+
+    const callbackParams = new URLSearchParams(window.location.hash.slice(1) || window.location.search.slice(1));
+    const callbackError = callbackParams.get('error_description');
+    let active = true;
+
     supabase.auth.getSession().then(({ data, error }) => {
-      if (error) notify(error.message);
-      setSession(data?.session ?? null);
+      if (!active) return;
+      if (error) {
+        notify(error.message);
+        if (isVerificationRoute) {
+          setVerificationStatus('error');
+          setVerificationError(error.message);
+        }
+      }
+      const currentSession = data?.session ?? null;
+      setSession(currentSession);
+      if (isVerificationRoute && !callbackError) {
+        if (currentSession) setVerificationStatus('success');
+        else {
+          setVerificationStatus('error');
+          setVerificationError('This verification link may have expired or already been used. Request a new link and try again.');
+        }
+      }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => subscription.unsubscribe();
+    if (callbackError && isVerificationRoute) {
+      setVerificationStatus('error');
+      setVerificationError(callbackError.replace(/\+/g, ' '));
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (isVerificationRoute && nextSession && (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION')) {
+        setVerificationStatus('success');
+      }
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const refreshCatalog = async () => {
@@ -141,6 +190,69 @@ export default function App() {
   };
   useEffect(() => { refreshCatalog(); }, [session?.user?.id]);
 
+  useEffect(() => {
+    let active = true;
+    if (!session?.user?.id || !supabase) {
+      setIsTrackAdmin(false);
+      setAdminTracks([]);
+      setAdminError('');
+      return () => { active = false; };
+    }
+
+    const checkAdminAccess = async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_track_admin');
+        if (!active) return;
+        if (error) throw error;
+        setIsTrackAdmin(data === true);
+        setAdminTracks([]);
+        setAdminError('');
+      } catch (error) {
+        if (!active) return;
+        setIsTrackAdmin(false);
+        const message = error?.message || 'Could not verify administrator access.';
+        setAdminError(message);
+        notify(message);
+      }
+    };
+    checkAdminAccess();
+
+    return () => { active = false; };
+  }, [session?.user?.id]);
+
+  const refreshAdminQueue = async () => {
+    if (!isTrackAdmin) return;
+    setAdminLoading(true);
+    setAdminError('');
+    try {
+      setAdminTracks(await fetchAdminTracks());
+    } catch (error) {
+      setAdminError(error.message || 'Could not load submissions for review.');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+  useEffect(() => { refreshAdminQueue(); }, [isTrackAdmin]);
+
+  useEffect(() => {
+    if (!isTrackAdmin && tab === 'admin') setTab('studio');
+  }, [isTrackAdmin, tab]);
+
+  const reviewTrack = async (trackId, status) => {
+    setReviewingTrackId(trackId);
+    setAdminError('');
+    try {
+      await updateTrackReviewStatus(trackId, status);
+      setAdminTracks((current) => current.filter((track) => track.id !== trackId));
+      await refreshCatalog();
+      notify(status === 'published' ? 'Track approved and published.' : 'Track rejected. It remains private.');
+    } catch (error) {
+      setAdminError(error?.message || 'Could not update the submission review status.');
+    } finally {
+      setReviewingTrackId('');
+    }
+  };
+
   const handleFile = (file) => {
     if (!file) return;
     if (!/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(file.name) && !file.type.startsWith('audio/')) return notify('Choose an audio file such as MP3, WAV, M4A, OGG, AAC, or FLAC.');
@@ -151,6 +263,16 @@ export default function App() {
   const authRedirectUrl = import.meta.env.DEV
     ? import.meta.env.VITE_AUTH_REDIRECT_URL?.trim() || window.location.origin
     : productionAuthRedirectUrl;
+  const verificationRedirectUrl = import.meta.env.DEV
+    ? new URL('/auth/verified', authRedirectUrl).toString()
+    : productionVerificationRedirectUrl;
+
+  const leaveVerificationPage = () => {
+    window.history.replaceState(null, '', '/');
+    setVerificationStatus('idle');
+    setVerificationError('');
+    setTab('studio');
+  };
 
   const submitAuth = async (event) => {
     event.preventDefault();
@@ -171,15 +293,27 @@ export default function App() {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: authRedirectUrl },
+          options: { emailRedirectTo: verificationRedirectUrl },
         });
         if (error) throw error;
+
+        const normalizedEmail = email.trim();
+        setCreatedEmail(normalizedEmail);
+        setAccountCreated(true);
         setAuthMessage(data.session
           ? 'Your account is ready. You are signed in.'
-          : 'Check your email and verify your address. After verification, return here to sign in.');
+          : 'Your artist account has been created. Please verify your email address to complete setup.');
+
+        if (!data.session) {
+          setPassword('');
+          setConfirmPassword('');
+          setAuthMode('signin');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
+        setAccountCreated(false);
+        setCreatedEmail('');
         setAuthMessage('You are signed in and can submit music for review.');
       }
     } catch (error) {
@@ -211,6 +345,34 @@ export default function App() {
       setAuthMessage('Check your inbox for a secure sign-in link.');
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Could not send a sign-in link. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const resendVerificationEmail = async () => {
+    if (!supabase) {
+      setAuthError('Connect Supabase before requesting another verification email.');
+      return;
+    }
+    if (!createdEmail && !email.trim()) {
+      setAuthError('Enter your email address to receive a verification email.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: createdEmail || email.trim(),
+        options: { emailRedirectTo: verificationRedirectUrl },
+      });
+      if (error) throw error;
+      setAuthMessage('A new verification email has been sent. Check your inbox, including your spam folder.');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not resend the verification email. Please try again.');
     } finally {
       setAuthLoading(false);
     }
@@ -344,14 +506,44 @@ export default function App() {
       <header className="topbar">
         <button className="brand" onClick={() => { setSelectedPlaylist(null); setSelectedGenre(null); setTab('discover'); }} aria-label="Junubify home"><span className="brand-icon"><Radio size={21}/></span><span><b>JUNUBIFY</b><small>SOUTH SUDAN BEATS</small></span></button>
         <input className="search" value={query} onChange={(event) => { setQuery(event.target.value); setGenreFilter(''); }} placeholder="Search tracks or artists" aria-label="Search tracks or artists" />
-        <nav className="nav-tabs" aria-label="Main navigation">
+        <nav className={`nav-tabs ${isTrackAdmin ? 'has-admin' : ''}`} aria-label="Main navigation">
           <button className={tab === 'discover' ? 'active' : ''} onClick={() => { setSelectedPlaylist(null); setSelectedGenre(null); setTab('discover'); }}><Headphones size={17}/> Discover</button>
           <button className={tab === 'studio' ? 'active' : ''} onClick={() => setTab('studio')}><Upload size={17}/> Artist studio</button>
+          {isTrackAdmin && <button className={tab === 'admin' ? 'active' : ''} onClick={() => setTab('admin')}><ShieldCheck size={17}/> Admin review</button>}
           <button className={tab === 'monetize' ? 'active' : ''} onClick={() => setTab('monetize')}><CircleDollarSign size={17}/> Monetization</button>
           <button className={tab === 'download' ? 'active' : ''} onClick={() => setTab('download')}><Smartphone size={17}/> Get the app</button>
         </nav>
       </header>
       <main className="content">
+        {tab === 'verified' && (
+          <section className={`verification-landing ${verificationStatus === 'error' ? 'has-error' : ''}`} aria-live="polite">
+            {verificationStatus === 'checking' ? (
+              <>
+                <span className="eyebrow success-tag">EMAIL VERIFICATION</span>
+                <h1>Confirming your email</h1>
+                <p>We’re securely completing your Junubify artist account setup. This should only take a moment.</p>
+              </>
+            ) : verificationStatus === 'success' ? (
+              <>
+                <span className="eyebrow success-tag">EMAIL VERIFIED</span>
+                <h1>You’re ready to make music with Junubify.</h1>
+                <p>
+                  {session?.user?.email ? <><strong>{session.user.email}</strong> is verified. </> : 'Your email address is verified. '}
+                  Continue to Artist Studio to submit tracks and manage your music.
+                </p>
+                <button className="button primary" type="button" onClick={leaveVerificationPage}>Continue to Artist Studio</button>
+              </>
+            ) : (
+              <>
+                <span className="eyebrow verification-error-tag">VERIFICATION NOT COMPLETED</span>
+                <h1>We couldn’t verify your email.</h1>
+                <p>{verificationError || 'The verification link could not be completed. Request a fresh email and try again.'}</p>
+                <button className="button primary" type="button" onClick={leaveVerificationPage}>Return to Artist Studio</button>
+              </>
+            )}
+          </section>
+        )}
+
         {tab === 'discover' && (selectedPlaylist ? <PlaylistDetail playlist={selectedPlaylist} tracks={selectedPlaylistTracks} playing={playing} isPlaying={Boolean(audioRef.current && !audioRef.current.paused)} onBack={() => setSelectedPlaylist(null)} onPlayTrack={playTrack} emptyMessage={query ? 'No songs match your search.' : 'No songs are available in this playlist yet.'}/> : selectedGenre ? <PlaylistDetail playlist={selectedGenre} tracks={selectedGenreTracks} playing={playing} isPlaying={Boolean(audioRef.current && !audioRef.current.paused)} onBack={() => setSelectedGenre(null)} onPlayTrack={playTrack} emptyMessage={query ? 'No songs match your search.' : 'No songs are available in this genre yet.'} kind="genre"/> : <>
           <section className="hero trend-hero"><div className="hero-copy"><span className="eyebrow"><AudioLines size={14}/> FEATURED JUBA PLAYLIST</span><h1>Top 50 South Sudan Trends</h1><p>Discover sounds from Juba, Wau, Malakal, and the diaspora. Explore community favorites and new releases.</p><div className="hero-actions"><button className="button primary hero-play" onClick={() => playAllTracks(visibleTracks)} disabled={!visibleTracks.length}><Play size={16} fill="currentColor"/> Play All <span>{visibleTracks.length}</span></button><button className="button secondary" onClick={() => setTab('studio')}><Upload size={16}/> Upload Song</button></div></div><div className="hero-badge"><BadgeCheck size={18}/> A home for local artists</div></section>
 
@@ -383,13 +575,15 @@ export default function App() {
             {!session ? (
               <section className="panel studio-auth">
                 <span className="eyebrow">ARTIST ACCOUNT</span>
-                <h2>{authMode === 'signup' ? 'Create your artist account' : 'Welcome back'}</h2>
+                <h2>{accountCreated ? 'Account created' : authMode === 'signup' ? 'Create your artist account' : 'Welcome back'}</h2>
                 <p className="auth-intro">
-                  {authMode === 'signup'
+                  {accountCreated
+                    ? 'One quick step remains before you can access your Artist Studio.'
+                    : authMode === 'signup'
                     ? 'Join Junubify to share your music with listeners across South Sudan and the diaspora.'
                     : 'Sign in to manage your submissions and share your sound.'}
                 </p>
-                <div className="auth-mode-switch" role="tablist" aria-label="Artist account options">
+                {!accountCreated && <div className="auth-mode-switch" role="tablist" aria-label="Artist account options">
                   <button
                     className={authMode === 'signin' ? 'selected' : ''}
                     type="button"
@@ -397,6 +591,7 @@ export default function App() {
                     aria-selected={authMode === 'signin'}
                     onClick={() => {
                       setAuthMode('signin');
+                      setAccountCreated(false);
                       setPassword('');
                       setConfirmPassword('');
                       setAuthError('');
@@ -412,6 +607,7 @@ export default function App() {
                     aria-selected={authMode === 'signup'}
                     onClick={() => {
                       setAuthMode('signup');
+                      setAccountCreated(false);
                       setPassword('');
                       setConfirmPassword('');
                       setAuthError('');
@@ -420,61 +616,119 @@ export default function App() {
                   >
                     Create account
                   </button>
-                </div>
-                <form className="auth-form" onSubmit={submitAuth}>
-                  <label>
-                    Email address
-                    <input
-                      type="email"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="you@example.com"
-                    />
-                  </label>
-                  <label>
-                    Password
-                    <input
-                      type="password"
-                      autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
-                      minLength={8}
-                      required
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="At least 8 characters"
-                    />
-                  </label>
-                  {authMode === 'signup' && (
+                </div>}
+                {accountCreated ? (
+                  <div className="auth-success-page" role="status" aria-live="polite">
+                    <div className="auth-success-hero">
+                      <span className="eyebrow success-tag">EMAIL VERIFICATION</span>
+                      <h3>Welcome to Junubify</h3>
+                      <p>
+                        Your artist account for <strong>{createdEmail || email}</strong> is almost ready.
+                        Please verify your email address to unlock your Artist Studio and start managing your submissions.
+                      </p>
+                    </div>
+
+                    <div className="auth-success-grid">
+                      <div className="success-panel">
+                        <span className="panel-label">Next steps</span>
+                        <ul>
+                          <li>Check your inbox for the verification email</li>
+                          <li>Confirm your address in one click</li>
+                          <li>Return here to sign in and upload your music</li>
+                        </ul>
+                      </div>
+
+                      <div className="success-panel emphasis">
+                        <span className="panel-label">What you can do after verification</span>
+                        <ul>
+                          <li>Submit tracks for private review</li>
+                          <li>Track review status and release progress</li>
+                          <li>Share your sound with listeners worldwide</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="auth-success-actions">
+                      <button
+                        className="button primary"
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('signin');
+                          setAccountCreated(false);
+                          setAuthMessage('');
+                          setAuthError('');
+                        }}
+                      >
+                        Back to sign in
+                      </button>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={resendVerificationEmail}
+                        disabled={authLoading || !supabaseConfigured}
+                      >
+                        {authLoading ? 'Sending…' : 'Resend verification email'}
+                      </button>
+                    </div>
+                    {authError && <p className="auth-feedback error" role="alert">{authError}</p>}
+                    {authMessage && <p className="auth-feedback success" role="status">{authMessage}</p>}
+                  </div>
+                ) : (
+                  <form className="auth-form" onSubmit={submitAuth}>
                     <label>
-                      Confirm password
+                      Email address
                       <input
-                        type="password"
-                        autoComplete="new-password"
-                        minLength={8}
+                        type="email"
+                        autoComplete="email"
                         required
-                        value={confirmPassword}
-                        onChange={(event) => setConfirmPassword(event.target.value)}
-                        placeholder="Re-enter your password"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@example.com"
                       />
                     </label>
-                  )}
-                  {authError && <p className="auth-feedback error" role="alert">{authError}</p>}
-                  {authMessage && <p className="auth-feedback success" role="status">{authMessage}</p>}
-                  <button className="button primary full" type="submit" disabled={authLoading || !supabaseConfigured}>
-                    {authLoading ? 'Please wait…' : authMode === 'signup' ? 'Create account' : 'Sign in'}
-                  </button>
-                  {authMode === 'signin' && (
-                    <button className="auth-link-button" type="button" onClick={sendSignInLink} disabled={authLoading || !supabaseConfigured}>
-                      Email me a secure sign-in link
+                    <label>
+                      Password
+                      <input
+                        type="password"
+                        autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                        minLength={8}
+                        required
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="At least 8 characters"
+                      />
+                    </label>
+                    {authMode === 'signup' && (
+                      <label>
+                        Confirm password
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={8}
+                          required
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          placeholder="Re-enter your password"
+                        />
+                      </label>
+                    )}
+                    {authError && <p className="auth-feedback error" role="alert">{authError}</p>}
+                    {authMessage && <p className="auth-feedback success" role="status">{authMessage}</p>}
+                    <button className="button primary full" type="submit" disabled={authLoading || !supabaseConfigured}>
+                      {authLoading ? 'Please wait…' : authMode === 'signup' ? 'Create account' : 'Sign in'}
                     </button>
-                  )}
-                </form>
-                <p className="auth-footnote">
+                    {authMode === 'signin' && (
+                      <button className="auth-link-button" type="button" onClick={sendSignInLink} disabled={authLoading || !supabaseConfigured}>
+                        Email me a secure sign-in link
+                      </button>
+                    )}
+                  </form>
+                )}
+                {!accountCreated && <p className="auth-footnote">
                   {authMode === 'signup'
                     ? 'We’ll email you a verification link. Verify your address to finish creating your account.'
                     : 'New artists need to verify their email before their first sign-in.'}
-                </p>
+                </p>}
               </section>
             ) : (
               <>
@@ -521,6 +775,64 @@ export default function App() {
                 </div>
               </>
             )}
+          </>
+        )}
+
+        {tab === 'admin' && isTrackAdmin && (
+          <>
+            <section className="section-heading">
+              <div>
+                <span className="eyebrow">ADMINISTRATION</span>
+                <h1>Track review</h1>
+                <p className="muted">Preview each private submission, then approve it for publication or reject it.</p>
+              </div>
+            </section>
+            <section className="panel admin-review">
+              <div className="admin-review-heading">
+                <div>
+                  <h2>Pending submissions</h2>
+                  <p className="muted">{adminTracks.length} awaiting review · audio remains private until approved</p>
+                </div>
+                <button className="button secondary" onClick={refreshAdminQueue} disabled={adminLoading}>
+                  {adminLoading ? 'Refreshing…' : 'Refresh queue'}
+                </button>
+              </div>
+              {adminError && <div className="notice-box" role="alert">{adminError}</div>}
+              {adminLoading ? (
+                <p className="muted">Loading submissions…</p>
+              ) : adminTracks.length ? (
+                <div className="admin-review-list">
+                  {adminTracks.map((track) => (
+                    <article className="admin-review-card" key={track.id}>
+                      <img src={track.cover} alt="" />
+                      <div className="admin-review-copy">
+                        <span className="eyebrow">PENDING REVIEW</span>
+                        <h3>{track.title}</h3>
+                        <p>{track.artist} · {track.genre}{track.album ? ` · ${track.album}` : ''}</p>
+                        <small>Submitted {new Date(track.createdAt).toLocaleString()} · {track.fileName}</small>
+                      </div>
+                      <div className="admin-review-actions">
+                        <button className="button secondary" onClick={() => playTrack(track)} aria-label={`Preview ${track.title}`}>
+                          <Play size={15} /> Preview
+                        </button>
+                        <button className="button primary" onClick={() => reviewTrack(track.id, 'published')} disabled={Boolean(reviewingTrackId)}>
+                          <Check size={15} /> Approve &amp; publish
+                        </button>
+                        <button className="button danger" onClick={() => reviewTrack(track.id, 'rejected')} disabled={Boolean(reviewingTrackId)}>
+                          <X size={15} /> Reject
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="catalog-empty">
+                  <div className="empty-icon"><ShieldCheck size={22}/></div>
+                  <p><strong>No tracks are waiting for review</strong></p>
+                  <small>New artist submissions will appear here.</small>
+                </div>
+              )}
+            </section>
           </>
         )}
 

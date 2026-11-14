@@ -15,18 +15,18 @@ The anon/publishable key is intended for browser use only. Never put a Supabase 
 
 ## Configure persistent song submissions
 
-1. Create a Supabase project and enable email authentication (configure allowed redirect URLs for your deployed site).
+1. Create a Supabase project and enable email authentication. Add `https://junubify-neon.vercel.app` and `https://junubify-neon.vercel.app/auth/verified` to the allowed redirect URLs; signup verification returns to the dedicated callback page.
 2. From the repository root, run `npx supabase login`, `npx supabase link --project-ref YOUR_PROJECT_REF`, then `npx supabase db push` to apply the migrations. You can also apply the timestamped SQL files in `supabase/migrations/` in order through the project SQL editor. See [the setup guide](docs/build-and-supabase-setup.md) for details.
 3. Set the project URL and anon/publishable key in `.env.local` and in your web host's environment settings.
 4. Start the app. Artists can create an account with email and password, verify their email, then sign in and submit metadata and audio from Artist Studio. Existing artists can also request a passwordless sign-in link.
 
 Audio uploads go to a private 50 MB bucket under the authenticated artist's UUID. Database and storage row-level security restrict upload/read access; new tracks remain `pending_review`. Only a trusted administrator/backend should approve a track by changing its status to `published`. The public catalog fetches published rows, and audio is served with temporary signed URLs. The UI's sample tracks remain demo content.
 
-Before launch, add an admin review workflow, rate limits/abuse controls, stronger content validation/scanning, backup/retention policies, and production auth email configuration. The browser file size/type checks are usability checks, not a security boundary.
+Trusted administrators can review private submissions in the Admin Review page and approve or reject them. To grant access, first create and verify the administrator's normal account, then add its auth user to `public.track_admins` using the SQL instructions in [the setup guide](docs/build-and-supabase-setup.md). Browser file size/type checks are usability checks, not a security boundary; add rate limits/abuse controls, stronger content scanning, backup/retention policies, and production auth email configuration before launch.
 
 ## Deploy to Vercel
 
-`vercel.json` configures the Vite build (`npm run build`, output `dist`) and SPA fallback. Import `Prototype20204/Junubify2` in Vercel, use the repository root as Root Directory, and deploy the `main` branch. In Vercel project settings, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the environments you intend to use, then redeploy. Production email links return to `https://junubify-neon.vercel.app`. Set Supabase Auth's Site URL to that origin and add it to the allowed redirect URLs.
+`vercel.json` configures the Vite build (`npm run build`, output `dist`) and SPA fallback. Import `Prototype20204/Junubify2` in Vercel, use the repository root as Root Directory, and deploy the `main` branch. In Vercel project settings, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the environments you intend to use, then redeploy. Production email links return to `https://junubify-neon.vercel.app`; signup confirmation uses `/auth/verified`. Set Supabase Auth's Site URL to the origin and add both the origin and callback URL to the allowed redirect URLs.
 
 The production deployment currently uses `https://junubify-neon.vercel.app`. A push to GitHub only updates a Vercel project if that project is connected to this repository and branch.
 

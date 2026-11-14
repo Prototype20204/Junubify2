@@ -31,6 +31,8 @@
     overflow: visible;
   }
 
+  .nav-tabs.has-admin { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
   .nav-tabs button {
     display: flex;
     min-width: 0;
