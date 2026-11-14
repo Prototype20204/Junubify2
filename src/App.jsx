@@ -1,9 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, AudioLines, BadgeCheck, CircleDollarSign, Compass, Download, Headphones, Heart, Music2, Pause, Play, Radio, Smartphone, Sparkles, TrendingUp, Upload, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AudioLines, BadgeCheck, CircleDollarSign, Compass, CreditCard, Download, Headphones, Heart, Music2, Pause, Play, Radio, Smartphone, Sparkles, TrendingUp, Upload, Wallet } from 'lucide-react';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
 import { createTrackAudioUrl, fetchArtistTracks, fetchPublishedTracks, submitTrack } from './lib/catalog.js';
 
 const paymentSetupMessage = 'Checkout and payouts are not connected yet. Configure a payment provider and secure backend before accepting money or promising transfers.';
+const paymentMethods = [
+  { name: 'MTN', detail: 'Mobile money · South Sudan', type: 'mobile' },
+  { name: 'ZAIN', detail: 'Mobile money · South Sudan', type: 'mobile' },
+  { name: 'Digitel', detail: 'Mobile money · South Sudan', type: 'mobile' },
+  { name: 'Credit card', detail: 'Card checkout', type: 'card' },
+];
 const productionAuthRedirectUrl = 'https://junubify-neon.vercel.app';
 const emptyForm = { title: '', artist: '', genre: 'Afrobeat', album: '', cover: '' };
 const fallbackCover = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=500';
@@ -518,7 +524,76 @@ export default function App() {
           </>
         )}
 
-        {tab === 'monetize' && <><section className="section-heading"><div><span className="eyebrow">CREATOR ECONOMY</span><h1>Monetization</h1><p className="muted">Plans and royalty information. Payments are not active.</p></div></section><div className="notice-box prominent"><b>Payments are not live yet</b><p>{paymentSetupMessage}</p></div><section className="plan-grid"><article className="panel plan-card"><span className="eyebrow">FOR LISTENERS</span><h2>Premium Fan</h2><div className="price">$2.99 <small>/ month</small></div><ul><li>Ad-free listening concept</li><li>Support local artists</li><li>Exclusive releases</li></ul></article><article className="panel plan-card"><span className="eyebrow">FOR ARTISTS</span><h2>Pro Creator</h2><div className="price">70% <small>proposed share</small></div><ul><li>Artist uploads</li><li>Proposed royalty share</li><li>Listener analytics concept</li></ul></article></section><section className="panel payout-panel"><div><span className="eyebrow">ROYALTIES &amp; PAYOUTS</span><h2>Artist earnings</h2><p className="muted">No earnings are calculated or transferred yet.</p></div><Wallet size={28}/></section></>}
+        {tab === 'monetize' && (
+          <>
+            <section className="section-heading">
+              <div>
+                <span className="eyebrow">CREATOR ECONOMY</span>
+                <h1>Monetization</h1>
+                <p className="muted">Plans and royalty information. Payments are not active.</p>
+              </div>
+            </section>
+            <div className="notice-box prominent">
+              <b>Payments are not live yet</b>
+              <p>{paymentSetupMessage}</p>
+            </div>
+            <section className="plan-grid">
+              <article className="panel plan-card">
+                <span className="eyebrow">FOR LISTENERS</span>
+                <h2>Premium Fan</h2>
+                <div className="price">$2.99 <small>/ month</small></div>
+                <ul>
+                  <li>Ad-free listening concept</li>
+                  <li>Support local artists</li>
+                  <li>Exclusive releases</li>
+                </ul>
+              </article>
+              <article className="panel plan-card">
+                <span className="eyebrow">FOR ARTISTS</span>
+                <h2>Pro Creator</h2>
+                <div className="price">70% <small>proposed share</small></div>
+                <ul>
+                  <li>Artist uploads</li>
+                  <li>Proposed royalty share</li>
+                  <li>Listener analytics concept</li>
+                </ul>
+              </article>
+            </section>
+            <section className="panel payment-methods-panel" aria-labelledby="payment-methods-title">
+              <div className="payment-methods-heading">
+                <div>
+                  <span className="eyebrow">SOUTH SUDAN CHECKOUT</span>
+                  <h2 id="payment-methods-title">Planned payment methods</h2>
+                  <p className="muted">Choose from local mobile money options or a payment card once checkout is configured.</p>
+                </div>
+                <span className="payment-methods-status">Setup pending</span>
+              </div>
+              <div className="payment-method-grid">
+                {paymentMethods.map((method) => (
+                  <article className="payment-method-card" key={method.name}>
+                    <span className={`payment-method-icon ${method.type}`} aria-hidden="true">
+                      {method.type === 'card' ? <CreditCard size={19}/> : <Smartphone size={19}/>}
+                    </span>
+                    <div className="payment-method-copy">
+                      <strong>{method.name}</strong>
+                      <small>{method.detail}</small>
+                    </div>
+                    <span className="payment-method-state">Coming soon</span>
+                  </article>
+                ))}
+              </div>
+              <p className="payment-method-note">No charges are processed. Provider credentials will be added later as server-side secrets after merchant setup and checkout verification.</p>
+            </section>
+            <section className="panel payout-panel">
+              <div>
+                <span className="eyebrow">ROYALTIES &amp; PAYOUTS</span>
+                <h2>Artist earnings</h2>
+                <p className="muted">No earnings are calculated or transferred yet.</p>
+              </div>
+              <Wallet size={28}/>
+            </section>
+          </>
+        )}
 
         {tab === 'download' && <section className="app-download panel"><div className="download-icon"><Smartphone size={42}/></div><span className="eyebrow">LISTEN WHEREVER YOU ARE</span><h1>Get Junubify for Android &amp; iOS</h1><p>Use the installable web app to keep Junubify close. Native store downloads will be linked once the apps are published.</p><div className="store-buttons"><div className="store-placeholder"><Download size={22}/><span><small>ANDROID APP</small><b>Coming soon</b></span></div><div className="store-placeholder"><Download size={22}/><span><small>APPLE APP</small><b>Coming soon</b></span></div></div><div className="qr-placeholder" aria-label="Decorative QR-style pattern" role="img">{Array.from({ length: 64 }, (_, index) => <i key={index} className={(index * 7 + index % 3) % 4 === 0 ? 'qr-lit' : ''}/>)}</div><p className="muted">To install the current web app, use your browser menu and choose “Add to Home screen”.</p></section>}
       </main>

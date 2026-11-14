@@ -32,8 +32,14 @@ The production deployment currently uses `https://junubify-neon.vercel.app`. A p
 
 If the app error screen appears, it displays the browser-side exception message to help diagnose the actual failure. Confirm the deployment is from the latest `main` commit and open the deployment's own URL, not an older deployment alias.
 
+## Native app preparation
+
+The web app is configured for Capacitor with the provisional Android/iOS application ID `com.junubify.app`. Run `npm run native:sync` after changing the web app to build and copy its assets into the native projects. Open `android/` in Android Studio or `ios/App/` in Xcode to configure signing and create store builds.
+
+Store publication is not complete: there are no Google Play or Apple App Store listings or public APK download URL yet. Android release builds require an installed Android SDK and a protected signing key; iOS builds require macOS, Xcode, and Apple signing credentials. Before release, replace the generated app icons, provide store screenshots and privacy/support URLs, and configure native email-auth deep links and the matching Supabase redirect allowlist. Do not commit signing keys or provider secrets.
+
 ## Payments: not activated
 
-This repository does not yet have a payment processor integration, and no payment or payout is made. Local providers have different merchant APIs, eligibility, webhook signatures, settlement/currency rules, and payout requirements; do not assume any provider is available for your business or country. To implement the real flow, choose the provider and merchant product you have access to and give the team its official API documentation and sandbox onboarding instructions. Keep credentials in server-side secrets, never in the browser. The `payment_events` and `royalty_ledger` tables are server-only foundations, not proof of received payments or payable earnings.
+The Monetization screen lists MTN, ZAIN, Digitel mobile money, and credit card as planned South Sudan payment methods. These are display-only options: no checkout, charge, or payout is made yet. Local providers have different merchant APIs, eligibility, webhook signatures, settlement/currency rules, and payout requirements; do not assume any provider is available for your business or country. To implement the real flow, choose the provider and merchant product you have access to and give the team its official API documentation and sandbox onboarding instructions. Keep credentials in server-side secrets, never in the browser. The `payment_events` and `royalty_ledger` tables are server-only foundations, not proof of received payments or payable earnings.
 
 A production payment integration must create checkout sessions server-side, verify signed provider webhooks, process event IDs idempotently, reconcile settlements/refunds, grant entitlements only after verified payment, and calculate royalties from reconciled revenue. Payouts additionally need provider support, artist identity/compliance checks, and reconciliation. The proposed plan prices and 70% split are product placeholders until terms and financial rules are confirmed.

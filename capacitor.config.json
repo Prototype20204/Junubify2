@@ -1,0 +1,8 @@
+{
+  "appId": "com.junubify.app",
+  "appName": "Junubify",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
